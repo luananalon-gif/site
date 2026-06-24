@@ -1,189 +1,89 @@
-// app.js — lógica simples usando localStorage
-const FORM = document.getElementById('tripForm');
-const PHOTO = document.getElementById('photo');
-const TRIPS_LIST = document.getElementById('tripsList');
-const CLEAR_ALL = document.getElementById('clearAll');
-
-const MODAL = document.getElementById('modal');
-const MODAL_IMG = document.getElementById('modalImage');
-const MODAL_TEXT = document.getElementById('modalText');
-const MODAL_CLOSE = document.getElementById('modalClose');
-
-const STORAGE_KEY = 'viagens_diario_v1';
-
-// helpers
-function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,8) }
-function readFileAsDataURL(file){ return new Promise((res, rej) => {
-  const fr = new FileReader();
-  fr.onload = ()=> res(fr.result);
-  fr.onerror = ()=> rej(new Error('Erro ao ler arquivo'));
-  fr.readAsDataURL(file);
-});}
-
-function loadTrips(){ try {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  return raw ? JSON.parse(raw) : [];
-}catch(e){ return [] }
-}
-function saveTrips(trips){ localStorage.setItem(STORAGE_KEY, JSON.stringify(trips)) }
-
-function renderTrips(){
-  const trips = loadTrips();
-  TRIPS_LIST.innerHTML = '';
-  if(trips.length === 0){
-    TRIPS_LIST.innerHTML = '<p style="grid-column:1/-1; color:var(--muted)">Nenhuma viagem registrada ainda.</p>';
-    return;
-  }
-  trips.slice().reverse().forEach(trip => {
-    const card = document.createElement('article');
-    card.className = 'trip-card';
-    card.innerHTML = `
-      <div class="trip-image">
-        ${trip.imageData ? `<img src="${trip.imageData}" alt="${escapeHtml(trip.title||trip.phrase)}"/>` : `<div style="padding:12px;color:var(--muted)">Sem foto</div>`}
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Esportes Agora — Notícias</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap header-inner">
+      <div class="brand">
+        <h1>Esportes Agora</h1>
+        <p class="tag">As principais notícias do mundo esportivo</p>
       </div>
-      <div class="trip-body">
-        <div class="trip-title">${escapeHtml(trip.title || '—')}</div>
-        <div class="trip-phrase">${escapeHtml(trip.phrase)}</div>
-        <div class="trip-comment">${escapeHtml(trip.comment || '')}</div>
-        <div class="card-actions">
-          <button class="small-btn btn-view" data-id="${trip.id}">Ver</button>
-          <button class="small-btn btn-edit" data-id="${trip.id}">Editar</button>
-          <button class="small-btn btn-delete" data-id="${trip.id}">Apagar</button>
-        </div>
+      <nav class="main-nav" aria-label="Navegação principal">
+        <button id="openAdd" class="btn small">+ Nova notícia</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap main">
+    <section class="hero">
+      <h2>Fique por dentro das últimas novidades</h2>
+      <p>Notícias, resultados, análises e melhores momentos das suas modalidades favoritas.</p>
+      <div class="controls">
+        <input id="search" type="search" placeholder="Pesquisar notícias..." aria-label="Pesquisar notícias">
+        <select id="filterSport" aria-label="Filtrar por esporte">
+          <option value="all">Todas as modalidades</option>
+          <option value="Futebol">Futebol</option>
+          <option value="Basquete">Basquete</option>
+          <option value="Tênis">Tênis</option>
+          <option value="Vôlei">Vôlei</option>
+          <option value="Fórmula 1">Fórmula 1</option>
+        </select>
       </div>
-    `;
-    TRIPS_LIST.appendChild(card);
-  });
-}
+    </section>
 
-function escapeHtml(s){ if(!s) return ''; return String(s).replace(/[&<>"']/g, function(m){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]) }) }
+    <section class="news">
+      <h3>Últimas notícias</h3>
+      <div id="newsList" class="grid"></div>
+    </section>
+  </main>
 
-// form submit
-FORM.addEventListener('submit', async (e)=>{
-  e.preventDefault();
-  const title = FORM.title.value.trim();
-  const phrase = FORM.phrase.value.trim();
-  const comment = FORM.comment.value.trim();
-  const file = PHOTO.files[0];
+  <!-- Modal de notícia -->
+  <div id="modal" class="modal" aria-hidden="true">
+    <div class="modal-panel">
+      <button id="modalClose" class="modal-close" aria-label="Fechar">✕</button>
+      <article id="modalArticle"></article>
+    </div>
+  </div>
 
-  if(!phrase){
-    alert('Por favor escreva uma frase/legenda.');
-    return;
-  }
-
-  let imageData = null;
-  if(file){
-    try{ imageData = await readFileAsDataURL(file) }catch(err){ console.error(err); alert('Erro ao ler imagem') }
-  }
-
-  const trips = loadTrips();
-  trips.push({
-    id: uid(),
-    title, phrase, comment, imageData,
-    createdAt: new Date().toISOString()
-  });
-  saveTrips(trips);
-  FORM.reset();
-  renderTrips();
-});
-
-// clear all
-CLEAR_ALL.addEventListener('click', ()=>{
-  if(confirm('Apagar todas as viagens salvas localmente?')) {
-    localStorage.removeItem(STORAGE_KEY);
-    renderTrips();
-  }
-});
-
-// delegated actions (view/edit/delete)
-TRIPS_LIST.addEventListener('click', (e)=>{
-  const id = e.target.dataset && e.target.dataset.id;
-  if(!id) return;
-  if(e.target.classList.contains('btn-view')){
-    doView(id);
-  } else if(e.target.classList.contains('btn-delete')){
-    doDelete(id);
-  } else if(e.target.classList.contains('btn-edit')){
-    doEdit(id);
-  }
-});
-
-function doView(id){
-  const trips = loadTrips();
-  const t = trips.find(x=>x.id===id);
-  if(!t) return;
-  if(t.imageData){
-    MODAL_IMG.src = t.imageData;
-  } else {
-    MODAL_IMG.src = '';
-  }
-  MODAL_TEXT.innerHTML = `<h3 style="margin-top:0">${escapeHtml(t.title || '')}</h3>
-    <p style="font-style:italic;color:var(--muted)">${escapeHtml(t.phrase)}</p>
-    <p>${escapeHtml(t.comment || '')}</p>
-    <small style="color:#667d86">Registrado em: ${new Date(t.createdAt).toLocaleString()}</small>`;
-  MODAL.setAttribute('aria-hidden','false');
-}
-
-MODAL_CLOSE.addEventListener('click', ()=> MODAL.setAttribute('aria-hidden','true'));
-MODAL.addEventListener('click', (e)=> { if(e.target === MODAL) MODAL.setAttribute('aria-hidden','true') })
-
-function doDelete(id){
-  if(!confirm('Apagar esta viagem?')) return;
-  let trips = loadTrips();
-  trips = trips.filter(t=>t.id !== id);
-  saveTrips(trips);
-  renderTrips();
-}
-
-function doEdit(id){
-  const trips = loadTrips();
-  const t = trips.find(x=>x.id===id);
-  if(!t) return;
-  // preenche formulário para edição simples: iremos apagar o item antigo e permitir salvar novo
-  if(!confirm('O formulário será preenchido com os dados desta viagem para edição. Ao salvar, a entrada será atualizada. Continuar?')) return;
-  FORM.title.value = t.title || '';
-  FORM.phrase.value = t.phrase || '';
-  FORM.comment.value = t.comment || '';
-  // se houver imagem, não podemos preencher input file; avisamos o usuário
-  if(t.imageData){
-    alert('A imagem existente será mantida se você não escolher outra foto ao salvar.');
-    // para preservar a imagem, ao salvar vamos copiar a imagem existente caso não haja novo arquivo
-    // implementamos um pequeno flag no formulário
-    FORM.dataset.preserveImage = t.imageData;
-  } else {
-    delete FORM.dataset.preserveImage;
-  }
-  // remove o item antigo (será substituído)
-  const remaining = trips.filter(x=>x.id !== id);
-  saveTrips(remaining);
-  renderTrips();
-}
-
-// quando salvar e houver preserveImage e nenhum novo arquivo, usamos a imagem preservada
-// para isso, interceptamos o submit handler: se dataset.preserveImage existe e não há arquivo, usamos-a.
-// (o submit handler já lida assim; apenas ajustamos o logic: se não houver file, usamos preserveImage)
-FORM.addEventListener('submit', function handlePreserve(e){
-  // o primeiro submit já é tratado; esta listener só garante a preserveImage é usada —
-  // no fluxo atual a primeira listener roda e, se não há file, imageData fica null.
-  // então ajustamos o saving step: se preserveImage presente e no campo photo não há file, recuperamos preserveImage e adicionamos ao último trip salvo.
-  // Implementação simples: mover esse ajuste para depois do submit original é mais complexo — em vez disso,
-  // melhor leitura: monkey-patch a bit: (no nosso fluxo atual, já gravamos a nova entrada com imageData null).
-  // Para simplicidade, aqui apenas limpa o flag (preserveImage) — o comportamento de "manter imagem" é tratado abaixo.
-  // Nota: essa listener não impede o submit.
-  setTimeout(()=>{
-    if(FORM.dataset.preserveImage){
-      // pega trips mais recentes; o último gravado pode ter imageData null — atualiza-o para a preserveImage
-      const trips = loadTrips();
-      const last = trips[trips.length - 1];
-      if(last && !last.imageData){
-        last.imageData = FORM.dataset.preserveImage;
-        saveTrips(trips);
-        delete FORM.dataset.preserveImage;
-        renderTrips();
-      }
-    }
-  }, 250);
-});
-
-// inicializa
-renderTrips();
+  <!-- Formulário adicionar notícia (modal) -->
+  <div id="addModal" class="modal" aria-hidden="true">
+    <div class="modal-panel">
+      <button id="addClose" class="modal-close" aria-label="Fechar">✕</button>
+      <form id="addForm" class="add-form">
+        <h3>Nova notícia</h3>
+        <label>
+          Título
+          <input name="title" required />
+        </label>
+        <label>
+          Modalidade
+          <select name="sport" required>
+            <option>Futebol</option>
+            <option>Basquete</option>
+            <option>Tênis</option>
+            <option>Vôlei</option>
+            <option>Fórmula 1</option>
+            <option>Outros</option>
+          </select>
+        </label>
+        <label>
+          Resumo / descrição curta
+          <input name="excerpt" required />
+        </label>
+        <label>
+          Conteúdo completo
+          <textarea name="content" rows="6" required></textarea>
+        </label>
+        <label>
+          URL da imagem (opcional)
+          <input name="image" placeholder="https://..." />
+        </label>
+        <div class="form-actions">
+          <button type="submit" class="btn primary">Publicar</button>
+          <button type="button" id="addCancel" class="btn ghost">Cancelar</button>
